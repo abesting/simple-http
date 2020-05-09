@@ -105,9 +105,8 @@ namespace SimpleHttp
                         else
                         {
                             await s.WaitAsync();
-                            Task.Factory.StartNew(() => onHttpRequestAsync(ctx.Request, ctx.Response), TaskCreationOptions.None)
-                                        .ContinueWith(t => s.Release())
-                                        .Wait(0);
+                            await Task.Run(() => onHttpRequestAsync(ctx.Request, ctx.Response));
+                            s.Release();
                         }
                     }
                     catch (Exception)
