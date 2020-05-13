@@ -24,6 +24,9 @@
 #endregion
 
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -36,6 +39,8 @@ namespace SimpleHttp
     /// </summary>
     public static class HttpServer
     {
+        public static ConcurrentQueue<Task> RequestTasks { get; } = new ConcurrentQueue<Task>();
+
         /// <summary>
         /// Creates and starts a new instance of the http(s) server.
         /// </summary>
@@ -49,7 +54,7 @@ namespace SimpleHttp
         {
             if (port < 0 || port > UInt16.MaxValue)
                 throw new NotSupportedException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
-          
+
             var s = useHttps ? "s" : String.Empty;
             await ListenAsync($"http{s}://+:{port}/", token, onHttpRequestAsync, maxHttpConnectionCount);
         }
@@ -87,11 +92,13 @@ namespace SimpleHttp
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
+            while (RequestTasks.Count > 0)
+                RequestTasks.TryDequeue(out _);
+
             using (var s = new SemaphoreSlim(maxHttpConnectionCount))
             using (var r = token.Register(() => listener.Close()))
             {
-                bool shouldStop = false;
-                while (!shouldStop)
+                while (!token.IsCancellationRequested)
                 {
                     try
                     {
@@ -105,21 +112,37 @@ namespace SimpleHttp
                         else
                         {
                             await s.WaitAsync();
-                            await Task.Run(() => onHttpRequestAsync(ctx.Request, ctx.Response));
-                            s.Release();
+                            RequestTasks.Enqueue(Task.Run(() => HandleRequest(ctx, onHttpRequestAsync, s), token));
+                            var failedTasks = RequestTasks.Where(t => t.Exception != null);
+                            if (failedTasks.Count() > 0)
+                            {
+                                throw new AggregateException(failedTasks.Select(t => t.Exception));
+                            }
+                            while (RequestTasks.TryPeek(out Task next))
+                            {
+                                if (next.IsCompleted)
+                                    RequestTasks.TryDequeue(out _);
+                                else
+                                    break;
+                            }
                         }
                     }
-                    catch (Exception)
+                    catch (OperationCanceledException)
                     {
-                        if (!token.IsCancellationRequested)
-                            throw;
-                    }
-                    finally
-                    {
-                        if (token.IsCancellationRequested)
-                            shouldStop = true;
                     }
                 }
+            }
+        }
+
+        private static async Task HandleRequest(HttpListenerContext ctx, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, SemaphoreSlim s)
+        {
+            try
+            {
+                await onHttpRequestAsync(ctx.Request, ctx.Response);
+            }
+            finally
+            {
+                s.Release();
             }
         }
 

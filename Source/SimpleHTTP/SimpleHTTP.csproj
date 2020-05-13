@@ -1,39 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp2.0;net47</TargetFrameworks>
-    <OutputPath>bin\</OutputPath>
+    <TargetFramework>netstandard2.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MimeTypesMap" Version="1.0.2" />
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-    <PackageReference Include="System.Net.Http" Version="4.3.3" />
+    <PackageReference Include="Mime" Version="3.1.0" />
   </ItemGroup>
 
-  <PropertyGroup Condition="'$(Configuration)'=='Release'">
-    <DocumentationFile>bin\$(TargetFramework)\SimpleHTTP.xml</DocumentationFile>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-  </PropertyGroup>
-  
-   <!-- NuGet -->
-  <PropertyGroup>
-    <PackageId>Simple-HTTP</PackageId>
-    <Authors>Darko Jurić</Authors>
-    <Description>Simple multi-platform HTTP server based on HttpListener.</Description>
-    <Copyright>Darko Jurić</Copyright>
-    <PackageLicenseUrl>https://raw.githubusercontent.com/dajuric/simple-http/master/LICENSE.md</PackageLicenseUrl>
-    <PackageIconUrl>https://raw.githubusercontent.com/dajuric/simple-http/master/Deploy/Logo/logo-small.png</PackageIconUrl>
-    <PackageProjectUrl>http://simple-http.net/</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/dajuric/simple-http/</RepositoryUrl>
-    <PackageTags>HTTP Server; C#; .NET; HttpListener</PackageTags>
-    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
-
-    <Version>1.0.6</Version>
-    <PackageOutputPath>../../Deploy/Nuget/bin/</PackageOutputPath>
-
-    <IncludeSource>True</IncludeSource>
-    <IncludeSymbols>True</IncludeSymbols>
-  </PropertyGroup>
-  
 </Project>
