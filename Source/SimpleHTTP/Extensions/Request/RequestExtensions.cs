@@ -35,6 +35,25 @@ namespace SimpleHttp
     /// </summary>
     public static partial class RequestExtensions
     {
+
+        /// <summary>
+        /// Get HTTP body content as string
+        /// </summary>
+        /// <param name="request">HTTP request.</param>
+        /// <returns>HTTP body as string, or null if no content available</returns>
+        public static string GetBody(this HttpListenerRequest request)
+        {
+            if (!request.HasEntityBody)
+            {
+                return null;
+            }
+            using (var bodyStream = request.InputStream)
+            using (var reader = new StreamReader(bodyStream, request.ContentEncoding))
+            {
+                return reader.ReadToEnd();
+            }
+        }
+
         /// <summary>
         /// Parses body of the request including form and multi-part form data.
         /// </summary>
