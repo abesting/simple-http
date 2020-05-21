@@ -7,7 +7,9 @@
 </p>
 
 **SimpleHTTP** - HTTP server for .NET    
-Lightweight HTTP server for .NET written based on *System.Net.HttpListener*. Supports partial file streaming, file caching (ETag), simple templating, single-pass form parsing (no temp file).
+This is a fork of the original SimpleHTTP project, a lightweight HTTP server for .NET written based on *System.Net.HttpListener* providing bugfixes and extensions. SimpleHTTP supports partial file streaming, file caching (ETag), simple templating, single-pass form parsing (no temp file).
+
+For the original project please refer to the archived version available at <a href="https://github.com/dajuric/simple-http">SimpleHTTP</a>
 
 > **Tutorial:** <a href="https://www.codeproject.com/Articles/1223491/Introducing-Simple-HTTP-Server-for-NET" target="_blank">CodeProject article</a>
 
