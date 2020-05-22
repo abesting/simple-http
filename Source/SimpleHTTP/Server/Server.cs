@@ -88,7 +88,7 @@ namespace SimpleHttp
             try { listener.Start(); }
             catch (Exception ex) when ((ex as HttpListenerException)?.ErrorCode == 5)
             {
-                var msg = getNamespaceReservationExceptionMessage(httpListenerPrefix);
+                var msg = GetNamespaceReservationExceptionMessage(httpListenerPrefix);
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
@@ -146,7 +146,7 @@ namespace SimpleHttp
             }
         }
 
-        static string getNamespaceReservationExceptionMessage(string httpListenerPrefix)
+        static string GetNamespaceReservationExceptionMessage(string httpListenerPrefix)
         {
             string msg = null;
             var m = Regex.Match(httpListenerPrefix, @"(?<protocol>\w+)://localhost:?(?<port>\d*)");
