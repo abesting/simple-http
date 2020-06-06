@@ -198,6 +198,11 @@ namespace SimpleHttp
 
         #region Response extensions (As)
 
+        public static void AsJson(this HttpListenerResponse response, string txt, string mime = "text/html")
+        {
+            response.AsText(txt, "application/json");
+        }
+
         /// <summary>
         /// Writes the specified data to the response.
         /// <para>Response is closed and can not be longer modified.</para>
