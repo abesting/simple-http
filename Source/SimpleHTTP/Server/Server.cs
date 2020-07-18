@@ -39,7 +39,6 @@ namespace SimpleHttp
     /// </summary>
     public static class HttpServer
     {
-        public static ConcurrentQueue<Task> RequestTasks { get; } = new ConcurrentQueue<Task>();
 
         /// <summary>
         /// Creates and starts a new instance of the http(s) server.
@@ -92,10 +91,7 @@ namespace SimpleHttp
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
-            while (RequestTasks.Count > 0)
-                RequestTasks.TryDequeue(out _);
-
-            using (var s = new SemaphoreSlim(maxHttpConnectionCount))
+            using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
             using (var r = token.Register(() => listener.Close()))
             {
                 while (!token.IsCancellationRequested)
@@ -111,20 +107,20 @@ namespace SimpleHttp
                         }
                         else
                         {
-                            await s.WaitAsync();
-                            RequestTasks.Enqueue(Task.Run(() => HandleRequest(ctx, onHttpRequestAsync, s), token));
-                            var failedTasks = RequestTasks.Where(t => t.Exception != null);
-                            if (failedTasks.Count() > 0)
+                            await semaphore.WaitAsync(token);
+                            Task.Run(async () =>
                             {
-                                throw new AggregateException(failedTasks.Select(t => t.Exception));
-                            }
-                            while (RequestTasks.TryPeek(out Task next))
-                            {
-                                if (next.IsCompleted)
-                                    RequestTasks.TryDequeue(out _);
-                                else
-                                    break;
-                            }
+                                try
+                                {
+                                    await HandleRequest(ctx, onHttpRequestAsync, semaphore);
+                                }
+                                catch (Exception e)
+                                {
+                                    ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                                    ctx.Response.AsText(e.Message);
+                                    ctx.Response.Close();
+                                }
+                            }, token);
                         }
                     }
                     catch (OperationCanceledException)
