@@ -99,24 +99,24 @@ namespace SimpleHttp
     /// <summary>
     /// Class defining all the required actions for route-processing and error handling.
     /// /// </summary>
-    public static class Route
+    public class Route
     {
-        static OnBefore before = null;
+        OnBefore before = null;
         /// <summary>
         /// Action executed before all route-methods.
         /// <para>It may be null.</para>
         /// </summary>
-        public static OnBefore Before
+        public OnBefore Before
         {
             get { return before; } set { before = value; }
         }
 
-        static OnError error = null;
+        OnError error = null;
         /// <summary>
         /// Action executed if an error occurs.
         /// <para>By default it outputs exception message as text with an existing status code. In case of 200-299, 'BadRequest' is used.</para>
         /// </summary>
-        public static OnError Error
+        public OnError Error
         {
             get { return error; }
             set { error = value ?? throw new ArgumentException($"The {nameof(Error)} must have non-null value."); }
@@ -125,9 +125,9 @@ namespace SimpleHttp
         /// <summary>
         /// Gets or sets the route methods.
         /// </summary>
-        static readonly List<(ShouldProcessFunc ShouldProcessFunc, HttpActionAsync Action)> Methods;
+        readonly List<(ShouldProcessFunc ShouldProcessFunc, HttpActionAsync Action)> Methods;
 
-        static Route()
+        public Route()
         {
             Methods = new List<(ShouldProcessFunc, HttpActionAsync)>();
             Error = (rq, rp, ex) =>
@@ -145,7 +145,7 @@ namespace SimpleHttp
         /// <param name="request">HTTP request.</param>
         /// <param name="response">HTTP response.</param>
         /// <returns>Request processing task.</returns>
-        public static async Task OnHttpRequestAsync(HttpListenerRequest request, HttpListenerResponse response)
+        public async Task OnHttpRequestAsync(HttpListenerRequest request, HttpListenerResponse response)
         {
             //run the 'before' method
             try
@@ -206,7 +206,7 @@ namespace SimpleHttp
         /// </param>
         /// <param name="action">Action executed if the specified pattern matches the URL path.</param>
         /// <param name="method">HTTP method (GET, POST, DELETE, HEAD).</param>
-        public static void Add(string pattern, HttpAction action, string method = "GET")
+        public void Add(string pattern, HttpAction action, string method = "GET")
         {
             Add((rq, args) =>
                 {
@@ -231,7 +231,7 @@ namespace SimpleHttp
         /// </param>
         /// <param name="action">Action executed if the specified pattern matches the URL path.</param>
         /// <param name="method">HTTP method (GET, POST, DELETE, HEAD).</param>
-        public static void Add(string pattern, HttpActionAsync action, string method = "GET")
+        public void Add(string pattern, HttpActionAsync action, string method = "GET")
         {
             Add((rq, args) =>
                 {
@@ -253,7 +253,7 @@ namespace SimpleHttp
         /// </summary>
         /// <param name="shouldProcess">Function defining whether the specified action should be executed or not.</param>
         /// <param name="action">Action executed if the specified pattern matches the URL path.</param>
-        public static void Add(ShouldProcessFunc shouldProcess, HttpActionAsync action)
+        public void Add(ShouldProcessFunc shouldProcess, HttpActionAsync action)
         {
             Methods.Add((shouldProcess, action));
         }
@@ -264,7 +264,7 @@ namespace SimpleHttp
         /// </summary>
         /// <param name="shouldProcess">Function defining whether the specified action should be executed or not.</param>
         /// <param name="action">Action executed if the specified pattern matches the URL path.</param>
-        public static void Add(ShouldProcessFunc shouldProcess, HttpAction action)
+        public void Add(ShouldProcessFunc shouldProcess, HttpAction action)
         {
             Methods.Add((shouldProcess, (rq, rp, args) => 
             { 
@@ -272,13 +272,9 @@ namespace SimpleHttp
                 return Task.FromResult(true);
             }));
         }
-
+        
         #endregion
-
-        static void Deconstruct<T1, T2>(this KeyValuePair<T1, T2> tuple, out T1 key, out T2 value)
-        {
-            key = tuple.Key;
-            value = tuple.Value;
-        }
+        
+        public void ClearRoutes() => Methods.Clear();
     }
 }

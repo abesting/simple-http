@@ -24,11 +24,9 @@
 #endregion
 
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -47,16 +45,17 @@ namespace SimpleHttp
         /// <param name="token">Cancellation token.</param>
         /// <param name="onHttpRequestAsync">Action executed on HTTP request.</param>
         /// <param name="postStart">Function to execute once http server is listening.</param>
+        /// <param name="localEndpointFilter">Enumerable of local endpoint URIs for filtering incoming requests.</param>
         /// <param name="useHttps">True to add 'https://' prefix instead of 'http://'.</param>
         /// <param name="maxHttpConnectionCount">Maximum HTTP connection count, after which the incoming requests will wait (sockets are not included).</param>
         /// <returns>Server listening task.</returns>
-        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, bool useHttps = false, byte maxHttpConnectionCount = 32)
+        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, IEnumerable<string> localEndpointFilter = null, bool useHttps = false, byte maxHttpConnectionCount = 32)
         {
             if (port < 0 || port > UInt16.MaxValue)
                 throw new NotSupportedException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
 
             var s = useHttps ? "s" : String.Empty;
-            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, maxHttpConnectionCount);                
+            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount);                
         }        
 
         /// <summary>
@@ -66,9 +65,10 @@ namespace SimpleHttp
         /// <param name="token">Cancellation token.</param>
         /// <param name="onHttpRequestAsync">Action executed on HTTP request.</param>
         /// <param name="postStart">Function to execute once http server is listening.</param>
+        /// <param name="localEndpointFilter">Enumerable of local endpoint URIs for filtering incoming requests.</param>
         /// <param name="maxHttpConnectionCount">Maximum HTTP connection count, after which the incoming requests will wait (sockets are not included).</param>
         /// <returns>Server listening task.</returns>
-        public static async Task ListenAsync(IEnumerable<string> httpListenerPrefixes, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, byte maxHttpConnectionCount = 32)
+        public static async Task ListenAsync(IEnumerable<string> httpListenerPrefixes, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, IEnumerable<string> localEndpointFilter = null, byte maxHttpConnectionCount = 32)
         {
             //--------------------- checks args
             if (token == null)
@@ -105,56 +105,55 @@ namespace SimpleHttp
             catch (Exception ex) when ((ex as HttpListenerException)?.ErrorCode == 5)
             {
                 string msg = $"The HTTP server can not be started, as the namespace reservation does not exist.\n" +
-                             $"Please run for each endpoint as admin: 'netsh http add urlacl url=http(s)://(host):(port)/ user=Everyone'.";
+                             $"Please run as admin: 'netsh http add urlacl url=http(s)://+:(port)/ user=Everyone'.";
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
             if (postStart != null)
                 await postStart();
             
-            try
+            using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
+            using (var closer = token.Register(() => listener.Close()))
             {
-                using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
-                using (var r = token.Register(() => listener.Close()))
+                while (!token.IsCancellationRequested)
                 {
-                    while (!token.IsCancellationRequested)
+                    try
                     {
-                        try
-                        {
-                            var ctx = await listener.GetContextAsync();
+                        var ctx = await listener.GetContextAsync();
 
-                            if (ctx.Request.IsWebSocketRequest)
+                        if (ctx.Request.IsWebSocketRequest)
+                        {
+                            ctx.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                            ctx.Response.Close();
+                            continue;
+                        }
+                        
+                        if (localEndpointFilter != null && !localEndpointFilter.Any(ep => ep.Contains(ctx.Request.LocalEndPoint.ToString())))
+                        {
+                            ctx.Response.StatusCode = (int)HttpStatusCode.NotFound;
+                            ctx.Response.Close();
+                            continue;
+                        }                        
+
+                        await semaphore.WaitAsync(token);
+                        Task.Run(async () =>
+                        {
+                            try
                             {
-                                ctx.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                                await HandleRequest(ctx, onHttpRequestAsync, semaphore);
+                            }
+                            catch (Exception e)
+                            {
+                                ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                                ctx.Response.AsText(e.Message);
                                 ctx.Response.Close();
                             }
-                            else
-                            {
-                                await semaphore.WaitAsync(token);
-                                Task.Run(async () =>
-                                {
-                                    try
-                                    {
-                                        await HandleRequest(ctx, onHttpRequestAsync, semaphore);
-                                    }
-                                    catch (Exception e)
-                                    {
-                                        ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                                        ctx.Response.AsText(e.Message);
-                                        ctx.Response.Close();
-                                    }
-                                }, token);
-                            }
-                        }
-                        catch (OperationCanceledException)
-                        {
-                        }
+                        }, token);
+                    }
+                    catch (OperationCanceledException)
+                    {
                     }
                 }
-            }
-            finally
-            {
-                listener.Stop();
             }
            
         }
