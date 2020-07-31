@@ -39,34 +39,36 @@ namespace SimpleHttp
     /// </summary>
     public static class HttpServer
     {
-
+        
         /// <summary>
-        /// Creates and starts a new instance of the http(s) server.
+        /// Creates and starts a new instance of the http(s) server binding to all local interfaces.
         /// </summary>
         /// <param name="port">The http/https URI listening port.</param>
         /// <param name="token">Cancellation token.</param>
         /// <param name="onHttpRequestAsync">Action executed on HTTP request.</param>
-        /// <param name="useHttps">True to add 'https://' prefix insteaad of 'http://'.</param>
+        /// <param name="postStart">Function to execute once http server is listening.</param>
+        /// <param name="useHttps">True to add 'https://' prefix instead of 'http://'.</param>
         /// <param name="maxHttpConnectionCount">Maximum HTTP connection count, after which the incoming requests will wait (sockets are not included).</param>
         /// <returns>Server listening task.</returns>
-        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, bool useHttps = false, byte maxHttpConnectionCount = 32)
+        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, bool useHttps = false, byte maxHttpConnectionCount = 32)
         {
             if (port < 0 || port > UInt16.MaxValue)
                 throw new NotSupportedException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
 
             var s = useHttps ? "s" : String.Empty;
-            await ListenAsync($"http{s}://+:{port}/", token, onHttpRequestAsync, maxHttpConnectionCount);
-        }
+            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, maxHttpConnectionCount);                
+        }        
 
         /// <summary>
-        /// Creates and starts a new instance of the http(s) / websocket server.
+        /// Creates and starts a new instance of the http(s) server.
         /// </summary>
-        /// <param name="httpListenerPrefix">The http/https URI listening prefix.</param>
+        /// <param name="httpListenerPrefixes">The http/https URI listening prefixes.</param>
         /// <param name="token">Cancellation token.</param>
         /// <param name="onHttpRequestAsync">Action executed on HTTP request.</param>
+        /// <param name="postStart">Function to execute once http server is listening.</param>
         /// <param name="maxHttpConnectionCount">Maximum HTTP connection count, after which the incoming requests will wait (sockets are not included).</param>
         /// <returns>Server listening task.</returns>
-        public static async Task ListenAsync(string httpListenerPrefix, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, byte maxHttpConnectionCount = 32)
+        public static async Task ListenAsync(IEnumerable<string> httpListenerPrefixes, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, byte maxHttpConnectionCount = 32)
         {
             //--------------------- checks args
             if (token == null)
@@ -79,55 +81,82 @@ namespace SimpleHttp
                 throw new ArgumentException(nameof(maxHttpConnectionCount), "The value must be greater or equal than 1.");
 
             var listener = new HttpListener();
-            try { listener.Prefixes.Add(httpListenerPrefix); }
-            catch (Exception ex) { throw new ArgumentException("The provided prefix is not supported. Prefixes have the format: 'http(s)://+:(port)/'", ex); }
-
-
-            //--------------------- start listener
-            try { listener.Start(); }
+            
+            foreach (var prefix in httpListenerPrefixes)
+            {
+                string next = prefix;
+                if (!next.EndsWith("/"))
+                    next += "/";
+                try
+                {
+                    listener.Prefixes.Add(next);
+                }
+                catch (Exception ex)
+                {
+                    throw new ArgumentException(
+                        "The provided prefix is not supported. Prefixes have the format: 'http(s)://+:(port)/'", ex);
+                }
+            }
+            
+            try
+            {
+                listener.Start();
+            }
             catch (Exception ex) when ((ex as HttpListenerException)?.ErrorCode == 5)
             {
-                var msg = GetNamespaceReservationExceptionMessage(httpListenerPrefix);
+                string msg = $"The HTTP server can not be started, as the namespace reservation does not exist.\n" +
+                             $"Please run for each endpoint as admin: 'netsh http add urlacl url=http(s)://(host):(port)/ user=Everyone'.";
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
-            using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
-            using (var r = token.Register(() => listener.Close()))
+            if (postStart != null)
+                await postStart();
+            
+            try
             {
-                while (!token.IsCancellationRequested)
+                using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
+                using (var r = token.Register(() => listener.Close()))
                 {
-                    try
+                    while (!token.IsCancellationRequested)
                     {
-                        var ctx = await listener.GetContextAsync();
+                        try
+                        {
+                            var ctx = await listener.GetContextAsync();
 
-                        if (ctx.Request.IsWebSocketRequest)
-                        {
-                            ctx.Response.StatusCode = (int)HttpStatusCode.BadRequest;
-                            ctx.Response.Close();
-                        }
-                        else
-                        {
-                            await semaphore.WaitAsync(token);
-                            Task.Run(async () =>
+                            if (ctx.Request.IsWebSocketRequest)
                             {
-                                try
+                                ctx.Response.StatusCode = (int)HttpStatusCode.BadRequest;
+                                ctx.Response.Close();
+                            }
+                            else
+                            {
+                                await semaphore.WaitAsync(token);
+                                Task.Run(async () =>
                                 {
-                                    await HandleRequest(ctx, onHttpRequestAsync, semaphore);
-                                }
-                                catch (Exception e)
-                                {
-                                    ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                                    ctx.Response.AsText(e.Message);
-                                    ctx.Response.Close();
-                                }
-                            }, token);
+                                    try
+                                    {
+                                        await HandleRequest(ctx, onHttpRequestAsync, semaphore);
+                                    }
+                                    catch (Exception e)
+                                    {
+                                        ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                                        ctx.Response.AsText(e.Message);
+                                        ctx.Response.Close();
+                                    }
+                                }, token);
+                            }
                         }
-                    }
-                    catch (OperationCanceledException)
-                    {
+                        catch (OperationCanceledException)
+                        {
+                        }
                     }
                 }
             }
+            finally
+            {
+                listener.Stop();
+            }
+           
         }
 
         private static async Task HandleRequest(HttpListenerContext ctx, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, SemaphoreSlim s)
@@ -140,28 +169,6 @@ namespace SimpleHttp
             {
                 s.Release();
             }
-        }
-
-        static string GetNamespaceReservationExceptionMessage(string httpListenerPrefix)
-        {
-            string msg = null;
-            var m = Regex.Match(httpListenerPrefix, @"(?<protocol>\w+)://localhost:?(?<port>\d*)");
-
-            if (m.Success)
-            {
-                var protocol = m.Groups["protocol"].Value;
-                var port = m.Groups["port"].Value; if (String.IsNullOrEmpty(port)) port = 80.ToString();
-
-                msg = $"The HTTP server can not be started, as the namespace reservation already exists.\n" +
-                      $"Please run (elevated): 'netsh http delete urlacl url={protocol}://+:{port}/'.";
-            }
-            else
-            {
-                msg = $"The HTTP server can not be started, as the namespace reservation does not exist.\n" +
-                      $"Please run (elevated): 'netsh http add urlacl url={httpListenerPrefix} user=\"Everyone\"'.";
-            }
-
-            return msg;
         }
     }
 }
