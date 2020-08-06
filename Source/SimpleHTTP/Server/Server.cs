@@ -136,6 +136,7 @@ namespace SimpleHttp
                         }                        
 
                         await semaphore.WaitAsync(token);
+#pragma warning disable 4014                        
                         Task.Run(async () =>
                         {
                             try
@@ -149,6 +150,7 @@ namespace SimpleHttp
                                 ctx.Response.Close();
                             }
                         }, token);
+#pragma warning restore 4014                        
                     }
                     catch (OperationCanceledException)
                     {
