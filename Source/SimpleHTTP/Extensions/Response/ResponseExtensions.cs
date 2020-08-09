@@ -198,7 +198,7 @@ namespace SimpleHttp
 
         #region Response extensions (As)
 
-        public static void AsJson(this HttpListenerResponse response, string txt, string mime = "text/html")
+        public static void AsJson(this HttpListenerResponse response, string txt)
         {
             response.AsText(txt, "application/json");
         }
