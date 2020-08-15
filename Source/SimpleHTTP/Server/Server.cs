@@ -115,6 +115,23 @@ namespace SimpleHttp
             using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
             using (var closer = token.Register(() => listener.Close()))
             {
+                async Task SafeHandleRequest(HttpListenerContext ctx)
+                {
+                    try
+                    {
+                        await onHttpRequestAsync(ctx.Request, ctx.Response);
+                    }
+                    catch (Exception e)
+                    {
+                        ctx.Response.StatusCode = (int) HttpStatusCode.InternalServerError;
+                        ctx.Response.AsText(e.Message);
+                        ctx.Response.Close();
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                }
                 while (!token.IsCancellationRequested)
                 {
                     try
@@ -136,20 +153,11 @@ namespace SimpleHttp
                         }                        
 
                         await semaphore.WaitAsync(token);
+                        if (maxHttpConnectionCount == 1)
+                            await SafeHandleRequest(ctx);
+                        else
 #pragma warning disable 4014                        
-                        Task.Run(async () =>
-                        {
-                            try
-                            {
-                                await HandleRequest(ctx, onHttpRequestAsync, semaphore);
-                            }
-                            catch (Exception e)
-                            {
-                                ctx.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
-                                ctx.Response.AsText(e.Message);
-                                ctx.Response.Close();
-                            }
-                        }, token);
+                            Task.Run(async () => { await SafeHandleRequest(ctx); }, token);
 #pragma warning restore 4014                        
                     }
                     catch (OperationCanceledException)
@@ -157,19 +165,7 @@ namespace SimpleHttp
                     }
                 }
             }
-           
         }
-
-        private static async Task HandleRequest(HttpListenerContext ctx, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, SemaphoreSlim s)
-        {
-            try
-            {
-                await onHttpRequestAsync(ctx.Request, ctx.Response);
-            }
-            finally
-            {
-                s.Release();
-            }
-        }
+        
     }
 }
