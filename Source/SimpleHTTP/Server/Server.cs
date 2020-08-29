@@ -37,7 +37,7 @@ namespace SimpleHttp
     /// </summary>
     public static class HttpServer
     {
-        
+
         /// <summary>
         /// Creates and starts a new instance of the http(s) server binding to all local interfaces.
         /// </summary>
@@ -52,7 +52,7 @@ namespace SimpleHttp
         public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, IEnumerable<string> localEndpointFilter = null, bool useHttps = false, byte maxHttpConnectionCount = 32)
         {
             if (port < 0 || port > UInt16.MaxValue)
-                throw new NotSupportedException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
+                throw new ArgumentException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
 
             var s = useHttps ? "s" : String.Empty;
             await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount);                
@@ -81,6 +81,8 @@ namespace SimpleHttp
                 throw new ArgumentException(nameof(maxHttpConnectionCount), "The value must be greater or equal than 1.");
 
             var listener = new HttpListener();
+            int threadPoolWorkers;
+            ThreadPool.GetMaxThreads(out _, out threadPoolWorkers);
             
             foreach (var prefix in httpListenerPrefixes)
             {
@@ -115,7 +117,7 @@ namespace SimpleHttp
             using (var semaphore = new SemaphoreSlim(maxHttpConnectionCount))
             using (var closer = token.Register(() => listener.Close()))
             {
-                async Task SafeHandleRequest(HttpListenerContext ctx)
+                async void SafeHandleRequestAsync(HttpListenerContext ctx)
                 {
                     try
                     {
@@ -153,12 +155,7 @@ namespace SimpleHttp
                         }                        
 
                         await semaphore.WaitAsync(token);
-                        if (maxHttpConnectionCount == 1)
-                            await SafeHandleRequest(ctx);
-                        else
-#pragma warning disable 4014                        
-                            Task.Run(async () => { await SafeHandleRequest(ctx); }, token);
-#pragma warning restore 4014                        
+                        SafeHandleRequestAsync(ctx);
                     }
                     catch (OperationCanceledException)
                     {
