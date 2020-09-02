@@ -26,8 +26,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace SimpleHttp
 {
@@ -213,9 +215,24 @@ namespace SimpleHttp
                     if (rq.HttpMethod != method)
                         return false;
 
-                    return rq.Url.PathAndQuery.TryMatch(pattern, args);
+                    var path = rq.Url.PathAndQuery;
+                    path = (path ?? "").Split('?', '#').First();
+                    AddQueryParams(rq.Url.Query, args);
+                    return path.TryMatch(pattern, args);
                 },
                 action);
+        }
+
+        private void AddQueryParams(string urlQuery, Dictionary<string, string> arguments)
+        {
+            var decoded = HttpUtility.UrlDecode(urlQuery).Substring(1);
+            var kvParam = decoded.Split('&');
+            foreach (var pair in kvParam)
+            {
+                var kv = pair.Split('=');
+                if (kv.Length == 2)
+                    arguments.Add(kv[0], kv[1]);
+            }
         }
 
         /// <summary>
@@ -238,7 +255,10 @@ namespace SimpleHttp
                     if (rq.HttpMethod != method)
                         return false;
 
-                    return rq.Url.PathAndQuery.TryMatch(pattern, args);
+                    var path = rq.Url.PathAndQuery;
+                    path = (path ?? "").Split('?', '#').First();
+                    AddQueryParams(rq.Url.Query, args);
+                    return path.TryMatch(pattern, args);
                 },
                 action);
         }

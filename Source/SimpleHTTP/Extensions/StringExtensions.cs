@@ -63,7 +63,8 @@ namespace SimpleHttp
 
             for (int i = 0; i < Math.Min(names.Count, match.Groups.Count - 1); i++)
             {
-                args.Add(names[i], match.Groups[i + 1].Value);
+                if (!args.ContainsKey(names[i]))
+                    args.Add(names[i], match.Groups[i + 1].Value);
             }
 
             return true;
