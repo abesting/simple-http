@@ -81,8 +81,6 @@ namespace SimpleHttp
                 throw new ArgumentException(nameof(maxHttpConnectionCount), "The value must be greater or equal than 1.");
 
             var listener = new HttpListener();
-            int threadPoolWorkers;
-            ThreadPool.GetMaxThreads(out _, out threadPoolWorkers);
             
             foreach (var prefix in httpListenerPrefixes)
             {
@@ -121,7 +119,7 @@ namespace SimpleHttp
                 {
                     try
                     {
-                        await onHttpRequestAsync(ctx.Request, ctx.Response);
+                        await onHttpRequestAsync(ctx.Request, ctx.Response).ConfigureAwait(false);
                     }
                     catch (Exception e)
                     {
@@ -138,7 +136,7 @@ namespace SimpleHttp
                 {
                     try
                     {
-                        var ctx = await listener.GetContextAsync();
+                        var ctx = await listener.GetContextAsync().ConfigureAwait(false);
 
                         if (ctx.Request.IsWebSocketRequest)
                         {
@@ -154,7 +152,7 @@ namespace SimpleHttp
                             continue;
                         }                        
 
-                        await semaphore.WaitAsync(token);
+                        await semaphore.WaitAsync(token).ConfigureAwait(false);
                         SafeHandleRequestAsync(ctx);
                     }
                     catch (OperationCanceledException)
