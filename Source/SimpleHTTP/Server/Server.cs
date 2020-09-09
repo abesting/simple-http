@@ -55,7 +55,7 @@ namespace SimpleHttp
                 throw new ArgumentException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
 
             var s = useHttps ? "s" : String.Empty;
-            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount);                
+            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount).ConfigureAwait(false);                
         }        
 
         /// <summary>
