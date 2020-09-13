@@ -37,6 +37,7 @@ namespace SimpleHttp
     /// </summary>
     public static class HttpServer
     {
+        private static string host = "+";
 
         /// <summary>
         /// Creates and starts a new instance of the http(s) server binding to all local interfaces.
@@ -49,13 +50,14 @@ namespace SimpleHttp
         /// <param name="useHttps">True to add 'https://' prefix instead of 'http://'.</param>
         /// <param name="maxHttpConnectionCount">Maximum HTTP connection count, after which the incoming requests will wait (sockets are not included).</param>
         /// <returns>Server listening task.</returns>
-        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, IEnumerable<string> localEndpointFilter = null, bool useHttps = false, byte maxHttpConnectionCount = 32)
+        public static async Task ListenAsync(int port, CancellationToken token, Func<HttpListenerRequest, HttpListenerResponse, Task> onHttpRequestAsync, Func<Task> postStart = null, IEnumerable<string> localEndpointFilter = null, bool useHttps = false, bool useIpV6 = false, byte maxHttpConnectionCount = 32)
         {
             if (port < 0 || port > UInt16.MaxValue)
                 throw new ArgumentException($"The provided port value must in the range: [0..{UInt16.MaxValue}");
 
             var s = useHttps ? "s" : String.Empty;
-            await ListenAsync(new [] {$"http{s}://+:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount).ConfigureAwait(false);                
+            host = useIpV6 ? "*" : "+";
+            await ListenAsync(new [] {$"http{s}://{host}:{port}/"}, token, onHttpRequestAsync, postStart, localEndpointFilter, maxHttpConnectionCount).ConfigureAwait(false);                
         }        
 
         /// <summary>
@@ -81,7 +83,7 @@ namespace SimpleHttp
                 throw new ArgumentException(nameof(maxHttpConnectionCount), "The value must be greater or equal than 1.");
 
             var listener = new HttpListener();
-            
+
             foreach (var prefix in httpListenerPrefixes)
             {
                 string next = prefix;
@@ -94,7 +96,7 @@ namespace SimpleHttp
                 catch (Exception ex)
                 {
                     throw new ArgumentException(
-                        "The provided prefix is not supported. Prefixes have the format: 'http(s)://+:(port)/'", ex);
+                        $"The provided prefix is not supported. Prefixes have the format: 'http(s)://{host}:(port)/'", ex);
                 }
             }
             
@@ -105,7 +107,7 @@ namespace SimpleHttp
             catch (Exception ex) when ((ex as HttpListenerException)?.ErrorCode == 5)
             {
                 string msg = $"The HTTP server can not be started, as the namespace reservation does not exist.\n" +
-                             $"Please run as admin: 'netsh http add urlacl url=http(s)://+:(port)/ user=Everyone'.";
+                             $"Please run as admin: 'netsh http add urlacl url=http(s)://{host}:(port)/ user=Everyone'.";
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
