@@ -106,8 +106,8 @@ namespace SimpleHttp
             }
             catch (Exception ex) when ((ex as HttpListenerException)?.ErrorCode == 5)
             {
-                string msg = $"The HTTP server can not be started, as the namespace reservation does not exist.\n" +
-                             $"Please run as admin: 'netsh http add urlacl url=http(s)://{host}:(port)/ user=Everyone'.";
+                string msg = $"The HTTP server can not be started, as the namespace reservation probably does not exist.\n" +
+                             $"Windows users, please run as admin: 'netsh http add urlacl url=http(s)://{host}:(port)/ user=Everyone'.";
                 throw new UnauthorizedAccessException(msg, ex);
             }
 
