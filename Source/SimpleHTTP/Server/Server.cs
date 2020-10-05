@@ -127,10 +127,10 @@ namespace SimpleHttp
                     {
                         ctx.Response.StatusCode = (int) HttpStatusCode.InternalServerError;
                         ctx.Response.AsText(e.Message);
-                        ctx.Response.Close();
                     }
                     finally
                     {
+                        ctx.Response.Close();
                         semaphore.Release();
                     }
                 }
