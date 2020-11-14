@@ -225,6 +225,8 @@ namespace SimpleHttp
 
         private void AddQueryParams(string urlQuery, Dictionary<string, string> arguments)
         {
+            if (string.IsNullOrEmpty(urlQuery) || urlQuery.Length < 4)
+                return;
             var decoded = HttpUtility.UrlDecode(urlQuery).Substring(1);
             var kvParam = decoded.Split('&');
             foreach (var pair in kvParam)
